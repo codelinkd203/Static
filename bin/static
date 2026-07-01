@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Launches the Static app with an optional folder argument, e.g.:
+#   static ~/Projects/my-site
+#   static .
+#   static            (no folder → shows the drag & drop launcher)
+set -e
+
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ELECTRON_BIN="$DIR/node_modules/.bin/electron"
+
+if [ ! -x "$ELECTRON_BIN" ]; then
+  echo "Static: dependencies not installed. Run 'npm install' inside $DIR first." >&2
+  exit 1
+fi
+
+exec "$ELECTRON_BIN" "$DIR" "$@"

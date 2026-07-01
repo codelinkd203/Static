@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;" />
+  <title>Static Preview</title>
+  <link rel="stylesheet" href="preview.css" />
+</head>
+<body>
+  <div class="window-frame" id="windowFrame">
+
+    <header class="toolbar" id="toolbar">
+      <div class="toolbar-drag-zone"></div>
+
+      <div class="toolbar-left">
+        <div class="app-icon" aria-hidden="true">
+          <img src="assets/logo.png" alt="" width="18" height="18" />
+        </div>
+        <span class="app-name">Static</span>
+
+        <div class="nav-group">
+          <button class="tool-btn" id="backBtn" title="Back" disabled>
+            <svg viewBox="0 0 20 20" width="14" height="14">
+              <path d="M12 4.5 6 10l6 5.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </button>
+          <button class="tool-btn" id="forwardBtn" title="Forward" disabled>
+            <svg viewBox="0 0 20 20" width="14" height="14">
+              <path d="M8 4.5 14 10l-6 5.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </button>
+        </div>
+
+        <label class="url-bar" for="addressInput">
+          <span class="url-bar__prefix"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-link" viewBox="0 0 16 16">
+  <path d="M6.354 5.5H4a3 3 0 0 0 0 6h3a3 3 0 0 0 2.83-4H9q-.13 0-.25.031A2 2 0 0 1 7 10.5H4a2 2 0 1 1 0-4h1.535c.218-.376.495-.714.82-1z"/>
+  <path d="M9 5.5a3 3 0 0 0-2.83 4h1.098A2 2 0 0 1 9 6.5h3a2 2 0 1 1 0 4h-1.535a4 4 0 0 1-.82 1H12a3 3 0 1 0 0-6z"/>
+</svg></span>
+          <input id="addressInput" class="url-input" type="text" spellcheck="false" value="" />
+        </label>
+      </div>
+
+      <div class="toolbar-right">
+        <div class="browser-icons" id="browserIcons">
+          <!-- populated dynamically with real installed-app icons -->
+        </div>
+
+        <div class="divider"></div>
+
+        <button class="tool-btn" id="reloadBtn" title="Reload">
+          <svg viewBox="0 0 20 20" width="15" height="15">
+            <path d="M16.5 10a6.5 6.5 0 1 1-1.94-4.63" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+            <path d="M16.7 3.5v4.2h-4.2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </button>
+
+        <button class="tool-btn" id="devtoolsBtn" title="Open DevTools">
+          <svg viewBox="0 0 20 20" width="15" height="15">
+            <path d="M7.2 3.3 8.9 5l-1 3.6-3.6 1-1.7-1.7a3 3 0 0 0 3.9 3.9L15 21.3a1.6 1.6 0 0 0 2.3-2.3L8.8 10.5a3 3 0 0 0-4-3.9Z"
+              fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" />
+          </svg>
+        </button>
+
+        <button class="tool-btn" id="openBtn" title="Open in selected browser">
+          <svg viewBox="0 0 20 20" width="15" height="15">
+            <path d="M8.5 4.5h7v7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+            <path d="M15.4 4.6 6.8 13.2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+            <path d="M12.8 10.5v4.2a1 1 0 0 1-1 1H5.3a1 1 0 0 1-1-1V8.2a1 1 0 0 1 1-1h4.2"
+              fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </button>
+
+        <button class="tool-btn danger" id="closeBtn" title="Stop server &amp; close">
+          <svg viewBox="0 0 20 20" width="14" height="14">
+            <path d="M5 5l10 10M15 5 5 15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <div class="content">
+      <div class="tab-strip" id="tabStrip"></div>
+      <!-- The actual served page is rendered by a native WebContentsView,
+           attached directly to this window by the main process and
+           positioned to exactly fill this area — not embedded here. -->
+      <div class="content-loading" id="contentLoading">
+        <div class="spinner"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="preview-url.js"></script>
+  <script src="preview.js"></script>
+</body>
+</html>

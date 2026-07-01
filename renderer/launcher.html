@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;" />
+  <title>Static</title>
+  <link rel="stylesheet" href="launcher.css" />
+</head>
+<body>
+  <div class="titlebar-drag"></div>
+
+  <main class="panel" id="panel">
+    <div class="glow"></div>
+
+    <div class="brand">
+      <div class="logo" aria-hidden="true">
+        <img src="assets/logo.png" alt="" width="64" height="64" />
+      </div>
+      <h1 class="title">Static</h1>
+      <p class="subtitle">Instant Local Web Preview</p>
+    </div>
+
+    <div class="dropzone" id="dropzone">
+      <div class="dropzone-inner">
+        <svg class="drop-icon" viewBox="0 0 40 40" width="30" height="30" aria-hidden="true">
+          <path d="M20 6v20M20 26l-7-7M20 26l7-7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" />
+          <path d="M8 30v3a3 3 0 0 0 3 3h18a3 3 0 0 0 3-3v-3" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" />
+        </svg>
+        <p class="drop-label">Drop a folder here</p>
+        <p class="drop-sub">or</p>
+        <button class="browse-btn" id="browseBtn">Browse…</button>
+      </div>
+    </div>
+
+    <p class="status" id="status" aria-live="polite">&nbsp;</p>
+  </main>
+
+  <script src="launcher.js"></script>
+</body>
+</html>

@@ -1,0 +1,36 @@
+{
+  "name": "static",
+  "version": "1.0.0",
+  "description": "Instant Local Web Preview — drop a folder, serve it, preview it.",
+  "main": "main.js",
+  "author": "Static",
+  "license": "MIT",
+  "private": true,
+  "bin": {
+    "static": "bin/static"
+  },
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder"
+  },
+  "devDependencies": {
+    "electron": "^30.0.0",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.static.app",
+    "productName": "Static",
+    "directories": {
+      "buildResources": "assets",
+      "output": "dist"
+    },
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "target": "dmg",
+      "icon": "logos.icns"
+    },
+    "dmg": {
+      "icon": "logos.icns"
+    }
+  }
+}   
