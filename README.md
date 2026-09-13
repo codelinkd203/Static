@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://github.com/AetherCodez/Static">
+  <a href="https://github.com/codelinkd203/Static">
     <img src="renderer/assets/logo.png" alt="Static Logo" width="160"/>
   </a>
 </p>
