@@ -13,12 +13,20 @@ contextBridge.exposeInMainWorld('previewAPI', {
   closeTab: (tabId) => ipcRenderer.send('close-preview-tab', { tabId }),
   stopAndClose: () => ipcRenderer.send('stop-and-close'),
   minimizeWindow: () => ipcRenderer.send('minimize-window'),
+
   onLoadState: (callback) =>
     ipcRenderer.on('preview-load-state', (_event, state) => callback(state)),
+
   onNavState: (callback) =>
     ipcRenderer.on('preview-nav-state', (_event, state) => callback(state)),
+
   onUrlChanged: (callback) =>
     ipcRenderer.on('preview-url-changed', (_event, state) => callback(state)),
+
   onTabsChanged: (callback) =>
     ipcRenderer.on('preview-tabs-changed', (_event, state) => callback(state)),
+
+  // Console error notifications
+  onConsoleError: (callback) =>
+    ipcRenderer.on('preview-console-error', (_event, data) => callback(data)),
 });

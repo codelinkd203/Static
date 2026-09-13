@@ -334,3 +334,65 @@ webview {
     transform: rotate(360deg);
   }
 }
+
+.devtools-btn {
+  position: relative;
+  transition:
+    background-color 0.25s ease,
+    box-shadow 0.25s ease,
+    color 0.25s ease;
+}
+
+.devtools-btn.has-errors {
+  color: #ff4d4d;
+  background: rgba(255, 50, 50, 0.12);
+  box-shadow: 0 0 12px rgba(255, 50, 50, 0.22);
+}
+
+.console-error-badge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+
+  box-sizing: border-box;
+
+  display: none;
+  align-items: center;
+  justify-content: center;
+
+  border-radius: 999px;
+
+  background: #ff3b30;
+  color: white;
+
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+
+  border: 2px solid rgba(30, 30, 30, 0.9);
+
+  pointer-events: none;
+
+  animation: consoleErrorBadgeIn 0.18s ease-out;
+}
+
+.devtools-btn.has-errors .console-error-badge {
+  display: flex;
+}
+
+@keyframes consoleErrorBadgeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}

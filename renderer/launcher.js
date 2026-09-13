@@ -4,6 +4,17 @@ const statusEl = document.getElementById('status');
 
 let busy = false;
 
+document.getElementById('year').textContent = new Date().getFullYear();
+
+window.addEventListener('keydown', (e) => {
+  if (
+    (e.metaKey && e.key.toLowerCase() === 'r')
+  ) {
+    e.preventDefault();
+    e.stopPropagation();
+  }
+});
+
 function setStatus(text, kind) {
   statusEl.textContent = text || '\u00A0';
   statusEl.className = 'status' + (kind ? ` ${kind}` : '');

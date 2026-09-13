@@ -1,4 +1,15 @@
-const { app, BrowserWindow, WebContentsView, ipcMain, dialog, nativeImage } = require('electron');
+const {
+  app,
+  BrowserWindow,
+  WebContentsView,
+  ipcMain,
+  dialog,
+  nativeImage,
+  session,
+  Menu,
+  shell,
+  clipboard,
+} = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -55,7 +66,7 @@ function readIconFileFromBundle(bundlePath) {
 function convertIcnsToDataURL(icnsPath) {
   const tmpPng = path.join(
     os.tmpdir(),
-    `static-icon-${Date.now()}-${Math.random().toString(36).slice(2)}.png`
+  `static-icon-${Date.now()}-${Math.random().toString(36).slice(2)}.png`
   );
   try {
     // Keep this call minimal — just format conversion, no inline resize
@@ -72,8 +83,8 @@ function convertIcnsToDataURL(icnsPath) {
     if (img.isEmpty() || size.width === 0 || size.height === 0) return null;
 
     const target = size.width > 64 || size.height > 64
-      ? img.resize({ width: 64, height: 64, quality: 'best' })
-      : img;
+    ? img.resize({ width: 64, height: 64, quality: 'best' })
+    : img;
 
     const dataUrl = target.toDataURL();
     // A valid PNG data URL is always well over this length; anything
@@ -264,12 +275,83 @@ function getActiveTab(state) {
   return state?.tabs.find((tab) => tab.id === state.activeTabId) || state?.tabs[0] || null;
 }
 
+// Finds which tab owns a given webContents id. Used by the network-level
+// error tracking below, since HTTP status codes and connection failures
+// come from session.webRequest (keyed by webContentsId), not from the
+// tab's own WebContentsView instance.
+function findOwnerTab(webContentsId) {
+  for (const state of previewWindows) {
+    const tab = state.tabs.find((entry) => entry.view?.webContents.id === webContentsId);
+    if (tab) return { win: state.win, tab };
+  }
+  return null;
+}
+
+function bumpTabErrorCount(win, tab, message) {
+  tab.consoleErrors = (tab.consoleErrors || 0) + 1;
+
+  console.log(
+    `[Static] Console error in ${tab.id}: #${tab.consoleErrors}`,
+    message
+  );
+
+  if (win.isDestroyed()) return;
+
+  win.webContents.send('preview-console-error', {
+    tabId: tab.id,
+    count: tab.consoleErrors,
+  });
+
+  sendTabsChanged(win);
+}
+
+// session.webRequest only supports a single onCompleted/onErrorOccurred
+// listener per session (registering again replaces the previous one), so
+// this is installed once and dispatches to whichever tab owns the request,
+// rather than being wired up per-tab like the other listeners below.
+let networkErrorTrackingInstalled = false;
+function installNetworkErrorTracking() {
+  if (networkErrorTrackingInstalled) return;
+  networkErrorTrackingInstalled = true;
+
+  const wr = session.defaultSession.webRequest;
+
+  // HTTP-level failures (404, 500, ...). did-fail-load never sees these
+  // because the network request itself "succeeds" with an error status —
+  // this is the category the devtools badge was missing entirely.
+  wr.onCompleted((details) => {
+    if (details.statusCode < 400) return;
+    const owner = findOwnerTab(details.webContentsId);
+    if (!owner) return;
+    bumpTabErrorCount(
+      owner.win,
+      owner.tab,
+      `${details.statusCode} ${details.method} ${details.url}`
+    );
+  });
+
+  // Network-level failures: DNS errors, connection refused, blocked mixed
+  // content, etc. ERR_ABORTED fires constantly during normal navigation
+  // and redirects, so it's excluded to avoid false positives.
+  wr.onErrorOccurred((details) => {
+    if (details.error === 'net::ERR_ABORTED') return;
+    const owner = findOwnerTab(details.webContentsId);
+    if (!owner) return;
+    bumpTabErrorCount(
+      owner.win,
+      owner.tab,
+      `${details.error} ${details.method} ${details.url}`
+    );
+  });
+}
+
 function getSerializableTabs(state) {
   return (state?.tabs || []).map((tab) => ({
     id: tab.id,
     title: tab.title,
     url: tab.url,
     origin: tab.origin,
+    consoleErrors: tab.consoleErrors || 0,
   }));
 }
 
@@ -348,6 +430,14 @@ function activateTab(win, tabId) {
 }
 
 function loadTabUrl(win, tab, targetUrl) {
+
+  tab.consoleErrors = 0;
+
+  win.webContents.send('preview-console-error', {
+    tabId: tab.id,
+    count: 0,
+  });
+
   if (!tab?.view) return;
   const resolvedUrl = targetUrl.toString();
   tab.url = resolvedUrl;
@@ -362,11 +452,14 @@ function addPreviewTab(win, { url, title = 'Preview', startPath = '/', loadImmed
   const state = getPreviewState(win);
   if (!state) return null;
 
+  installNetworkErrorTracking();
+
   const tabId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const previewView = new WebContentsView({
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
+      disableHttpCache: true,
     },
   });
   win.contentView.addChildView(previewView);
@@ -382,11 +475,77 @@ function addPreviewTab(win, { url, title = 'Preview', startPath = '/', loadImmed
   state.tabs.push(tab);
 
   const wc = previewView.webContents;
+
+  // Track console errors for this tab
+  tab.consoleErrors = 0;
+
+  function reportConsoleError(message = '') {
+    tab.consoleErrors = (tab.consoleErrors || 0) + 1;
+
+    console.log(
+  `[Static] Console error in ${tab.id}: #${tab.consoleErrors}`,
+  message
+  );
+
+    if (win.isDestroyed()) return;
+
+    win.webContents.send('preview-console-error', {
+      tabId: tab.id,
+      count: tab.consoleErrors,
+    });
+
+    sendTabsChanged(win);
+  }
+
+// Normal console.error(), console.warn(), etc.
+  wc.on('console-message', (_event, levelOrDetails, message) => {
+    const level =
+    typeof levelOrDetails === 'object'
+    ? levelOrDetails?.level
+    : levelOrDetails;
+
+    if (level === 'error' || level === 3) {
+      reportConsoleError(message);
+    }
+  });
+
+// Uncaught JavaScript errors
+  wc.on('did-finish-load', () => {
+    if (wc.isDestroyed()) return;
+
+    wc.executeJavaScript(`
+    (() => {
+      if (window.__staticErrorHooksInstalled) return;
+      window.__staticErrorHooksInstalled = true;
+
+      window.addEventListener('error', (event) => {
+        console.error(
+          '[Static uncaught]',
+          event.message || 'Unknown JavaScript error'
+        );
+      });
+
+      window.addEventListener('unhandledrejection', (event) => {
+        console.error(
+          '[Static unhandled rejection]',
+          event.reason?.message ||
+          String(event.reason || 'Unhandled promise rejection')
+        );
+      });
+    })();
+    `).catch(() => {});
+  });
+
   wc.on('did-start-loading', () => sendLoadState(win, true));
   wc.on('did-stop-loading', () => sendLoadState(win, false));
   wc.on('did-fail-load', (_e, code) => {
     if (code !== -3) sendLoadState(win, false);
   });
+  // Network- and HTTP-level failures (404s, connection errors, etc.) are
+  // reported globally via installNetworkErrorTracking()/session.webRequest
+  // instead of here, since did-fail-load's errorCode never reflects HTTP
+  // status codes and webRequest can see both main-frame and subresource
+  // requests in one place.
   wc.on('did-navigate', () => {
     tab.url = wc.getURL() || tab.url;
     tab.origin = new URL(tab.url || url).origin;
@@ -439,7 +598,30 @@ function cleanupPreviewWindow(win) {
   }
 }
 
+async function clearPreviewData() {
+  const ses = session.defaultSession;
+
+  // Clear Chromium's HTTP cache.
+  await ses.clearCache();
+
+  // Clear site data that can make one project appear in another:
+  // localStorage, IndexedDB, cookies, service workers, etc.
+  await ses.clearStorageData({
+    storages: [
+      'appcache',
+      'cookies',
+      'filesystem',
+      'indexdb',
+      'localstorage',
+      'serviceworkers',
+      'cachestorage',
+      'websql',
+    ],
+  });
+}
+
 function createPreviewWindow(url, startPath = '/') {
+  installPreviewKeyboardShortcuts();
   const previewWin = new BrowserWindow({
     width: 1180,
     height: 780,
@@ -503,6 +685,11 @@ async function launchFolder(folderPath, startPath = '/') {
   }
 
   servingFolder = resolved;
+
+// Make sure the previous project's cached site data cannot leak
+// into this project.
+  await clearPreviewData();
+
   await startHttpServer(resolved, servingPort);
   const url = `http://localhost:${servingPort}`;
   await waitForServerReady(url);
@@ -647,10 +834,189 @@ ipcMain.on('minimize-window', (event) => {
   if (win) win.minimize();
 });
 
+function installPreviewKeyboardShortcuts() {
+  const isMac = process.platform === 'darwin';
+
+  const template = [
+    // The bolded app-name menu (macOS only — on Win/Linux this section is
+    // skipped and its quit/hide items live under File instead).
+    ...(isMac
+      ? [
+          {
+            label: 'Static',
+            submenu: [
+              { label: 'About Static', role: 'about' },
+              { type: 'separator' },
+              { role: 'services' },
+              { type: 'separator' },
+              { role: 'hide' },
+              { role: 'hideOthers' },
+              { role: 'unhide' },
+              { type: 'separator' },
+              { role: 'quit' },
+            ],
+          },
+        ]
+      : []),
+    {
+      label: 'File',
+      submenu: [
+        {
+          label: 'Reveal Project in Finder',
+          accelerator: 'CmdOrCtrl+Shift+F',
+          click: () => {
+            if (servingFolder) shell.showItemInFolder(servingFolder);
+          },
+        },
+        {
+          label: 'Copy Preview URL',
+          accelerator: 'CmdOrCtrl+Shift+C',
+          click: (_menuItem, browserWindow) => {
+            const activeTab = getActiveTab(getPreviewState(browserWindow));
+            if (activeTab?.url) clipboard.writeText(activeTab.url);
+          },
+        },
+        { type: 'separator' },
+        {
+          label: 'Toggle DevTools',
+          accelerator: 'CmdOrCtrl+Alt+I',
+          click: (_menuItem, browserWindow) => {
+            if (!browserWindow || browserWindow.isDestroyed()) return;
+            const state = getPreviewState(browserWindow);
+            const activeTab = getActiveTab(state);
+            if (activeTab?.view && !activeTab.view.webContents.isDestroyed()) {
+              activeTab.view.webContents.toggleDevTools();
+            }
+          },
+        },
+        { type: 'separator' },
+        isMac ? { role: 'close', label: 'Close Window' } : { role: 'quit' },
+      ],
+    },
+    {
+      label: 'Edit',
+      submenu: [
+        { role: 'undo' },
+        { role: 'redo' },
+        { type: 'separator' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+        { role: 'selectAll' },
+      ],
+    },
+    {
+      label: 'View',
+      submenu: [
+        {
+          label: 'Reload Preview',
+          accelerator: 'CmdOrCtrl+R',
+          click: (_menuItem, browserWindow) => {
+            if (!browserWindow || browserWindow.isDestroyed()) return;
+
+            const state = getPreviewState(browserWindow);
+            const activeTab = getActiveTab(state);
+
+            if (activeTab?.view && !activeTab.view.webContents.isDestroyed()) {
+              activeTab.view.webContents.reload();
+            }
+          },
+        },
+        {
+          label: 'Force Reload Preview',
+          accelerator: 'CmdOrCtrl+Shift+R',
+          click: (_menuItem, browserWindow) => {
+            if (!browserWindow || browserWindow.isDestroyed()) return;
+
+            const state = getPreviewState(browserWindow);
+            const activeTab = getActiveTab(state);
+
+            if (activeTab?.view && !activeTab.view.webContents.isDestroyed()) {
+              activeTab.view.webContents.reloadIgnoringCache();
+            }
+          },
+        },
+        { type: 'separator' },
+        {
+          label: 'Zoom In',
+          accelerator: 'CmdOrCtrl+Plus',
+          click: (_menuItem, browserWindow) => {
+            const activeTab = getActiveTab(getPreviewState(browserWindow));
+            const wc = activeTab?.view?.webContents;
+            if (wc && !wc.isDestroyed()) wc.setZoomLevel(wc.getZoomLevel() + 0.5);
+          },
+        },
+        {
+          label: 'Zoom Out',
+          accelerator: 'CmdOrCtrl+-',
+          click: (_menuItem, browserWindow) => {
+            const activeTab = getActiveTab(getPreviewState(browserWindow));
+            const wc = activeTab?.view?.webContents;
+            if (wc && !wc.isDestroyed()) wc.setZoomLevel(wc.getZoomLevel() - 0.5);
+          },
+        },
+        {
+          label: 'Actual Size',
+          accelerator: 'CmdOrCtrl+0',
+          click: (_menuItem, browserWindow) => {
+            const activeTab = getActiveTab(getPreviewState(browserWindow));
+            const wc = activeTab?.view?.webContents;
+            if (wc && !wc.isDestroyed()) wc.setZoomLevel(0);
+          },
+        },
+      ],
+    },
+    {
+      label: 'Window',
+      submenu: [
+        {
+          label: 'Open in Browser',
+          accelerator: 'CmdOrCtrl+Shift+O',
+          click: (_menuItem, browserWindow) => {
+            const activeTab = getActiveTab(getPreviewState(browserWindow));
+            if (activeTab?.url) shell.openExternal(activeTab.url);
+          },
+        },
+        { type: 'separator' },
+        { role: 'minimize' },
+        { role: 'zoom' },
+        { type: 'separator' },
+        { role: 'close', label: 'Close Window' },
+        { type: 'separator' },
+        { role: 'front' },
+        { type: 'separator' },
+        { role: 'quit', label: 'Quit Static' },
+      ],
+    },
+    {
+      // macOS turns a top-level "Help" menu with role: 'help' into the
+      // native NSApp help menu, which gets the built-in search field for
+      // free — typing there searches every item in every menu above.
+      label: 'Help',
+      role: 'help',
+      submenu: [
+        {
+          label: 'Static on GitHub',
+          click: () => shell.openExternal('https://github.com/codelinkd203/Static'),
+        },
+        {
+          label: 'Report an Issue…',
+          click: () => shell.openExternal('https://github.com/codelinkd203/Static/issues'),
+        },
+      ],
+    },
+  ];
+
+  const menu = Menu.buildFromTemplate(template);
+  Menu.setApplicationMenu(menu);
+}
+
 // ---------------------------------------------------------------------------
 // App lifecycle
 // ---------------------------------------------------------------------------
 app.whenReady().then(async () => {
+  installPreviewKeyboardShortcuts();
+
   const cliFolder = resolveCliFolder();
   if (cliFolder) {
     try {

@@ -9,6 +9,7 @@ const backBtn = document.getElementById('backBtn');
 const forwardBtn = document.getElementById('forwardBtn');
 const reloadBtn = document.getElementById('reloadBtn');
 const devtoolsBtn = document.getElementById('devtoolsBtn');
+const consoleErrorBadge = document.getElementById('consoleErrorBadge');
 const openBtn = document.getElementById('openBtn');
 const closeBtn = document.getElementById('closeBtn');
 
@@ -17,6 +18,24 @@ let selectedBrowser = null;
 let currentUrl = initialPreviewUrl;
 let tabs = [];
 let activeTabId = null;
+
+window.previewAPI.onConsoleError(({ tabId, count }) => {
+  const tab = tabs.find((t) => t.id === tabId);
+
+  if (tab) {
+    tab.consoleErrors = count;
+  }
+
+  if (tabId !== activeTabId) return;
+
+  if (count > 0) {
+    devtoolsBtn.classList.add('has-errors');
+    consoleErrorBadge.textContent = count > 99 ? '99+' : String(count);
+  } else {
+    devtoolsBtn.classList.remove('has-errors');
+    consoleErrorBadge.textContent = '0';
+  }
+});
 
 const { normalizePreviewInput, getDisplayAddress } = window.previewUrlHelpers;
 
@@ -48,6 +67,17 @@ window.previewAPI.onTabsChanged(({ tabs: nextTabs, activeTabId: nextActiveTabId 
   tabs = nextTabs || [];
   activeTabId = nextActiveTabId;
   renderTabs();
+
+  const activeTab = tabs.find((tab) => tab.id === activeTabId);
+  const count = activeTab?.consoleErrors || 0;
+
+  if (count > 0) {
+    devtoolsBtn.classList.add('has-errors');
+    consoleErrorBadge.textContent = count > 99 ? '99+' : String(count);
+  } else {
+    devtoolsBtn.classList.remove('has-errors');
+    consoleErrorBadge.textContent = '0';
+  }
 });
 
 function renderTabs() {
