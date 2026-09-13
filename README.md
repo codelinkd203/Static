@@ -174,7 +174,7 @@ Just **Static**.
 Clone the repository and install the required dependencies:
 
 ```bash
-git clone https://github.com/AetherCodez/Static.git
+git clone https://github.com/codelinkd203/Static.git
 cd Static
 npm install
 ```
@@ -216,9 +216,9 @@ See [LICENSE](LICENSE) for the full license text.
 
 ## Support
 
-* **Issues**: [GitHub Issues](https://github.com/AetherCodez/Static/issues)
-* **Discussions**: [GitHub Discussions](https://github.com/AetherCodez/Static/discussions)
-* **Source Code**: [GitHub Repository](https://github.com/AetherCodez/Static)
+* **Issues**: [GitHub Issues](https://github.com/codelinkd203/Static/issues)
+* **Discussions**: [GitHub Discussions](https://github.com/codelinkd203/Static/discussions)
+* **Source Code**: [GitHub Repository](https://github.com/codelinkd203/Static)
 * **Star the repository** if you like Static!
 
 ---
