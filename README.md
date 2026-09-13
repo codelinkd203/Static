@@ -190,7 +190,7 @@ npm start
 Static can also be packaged as a native macOS application:
 
 ```bash
-npm run dist
+npm run build
 ```
 
 The resulting application can be installed and launched like any other Mac app.
