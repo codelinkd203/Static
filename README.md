@@ -1,91 +1,232 @@
-# Static — Instant Local Web Preview
+<p align="center">
+  <a href="https://github.com/AetherCodez/Static">
+    <img src="renderer/assets/logo.png" alt="Static Logo" width="160"/>
+  </a>
+</p>
 
-A native-feeling macOS utility: drop a folder, it's served on `localhost:9090`,
-and a Quick-Look-style floating preview window opens with one-click access to
-every browser installed on your Mac.
+<h1 align="center">Static</h1>
 
-## Requirements
+<p align="center">
+  Instantly preview local websites with a beautiful, native macOS experience.
+</p>
 
-- macOS (uses `vibrancy`, `hiddenInset` title bars, and `/Applications` browser
-  detection — this app is macOS-only by design)
-- Node.js 18+
-- Python 3 available on `PATH` as `python3` (falls back to `python`)
+<br>
 
-## Setup
+## What is Static?
+
+Static is a lightweight macOS utility for previewing local websites without the hassle of setting up a development server.
+
+Simply drop a folder onto Static and your website is instantly available in a clean, Quick Look-style preview window. You can browse your project, reload it, open it in another browser, and access developer tools — all without leaving Static.
+
+Whether you're testing a small HTML page or working on an entire website, Static keeps local previews simple.
+
+## The Problem
+
+Previewing a local website can often mean:
+
+* Opening Terminal and starting a development server
+* Remembering commands and ports
+* Manually navigating to `localhost`
+* Switching between your editor and browser
+* Repeating the same setup every time you want to test something
+
+For simple websites, that's a lot of unnecessary work.
+
+## The Solution
+
+Static turns the entire process into one simple action:
+
+**Drop a folder → Preview your website.**
+
+No project configuration. No setup files. No complicated workflow.
+
+## Features
+
+* **Instant Previews** — Drop a folder and start browsing immediately
+* **Beautiful Native Interface** — Designed specifically for macOS
+* **Quick Look-Style Window** — Preview your site in a clean, focused window
+* **Browser Shortcuts** — Quickly open your project in any supported browser installed on your Mac
+* **Automatic Browser Detection** — Only browsers actually installed on your Mac are shown
+* **Live Reloading** — Refresh your website instantly from the toolbar
+* **Developer Tools** — Inspect and debug your website when you need to
+* **Drag & Drop** — Drop any website folder directly onto Static
+* **Folder Browser** — Choose a project using the standard macOS file picker
+* **Command-Line Support** — Open projects directly from Terminal
+* **Multiple Projects** — Quickly switch between projects and previews
+* **No Configuration Required** — Works out of the box with existing website folders
+* **Native macOS Feel** — Smooth animations, translucency, and familiar macOS controls
+
+## Getting Started
+
+### Drag & Drop
+
+The easiest way to use Static:
+
+1. Open Static
+2. Drag a website folder onto the window
+3. Your website opens instantly
+
+That's it.
+
+### Browse for a Folder
+
+You can also choose a folder using the **Browse** button and Static will immediately open a preview of it.
+
+## Command Line
+
+Static can also be launched directly from Terminal.
 
 ```bash
-cd static-app
+static ~/Projects/my-site
+```
+
+This opens the specified folder directly in Static without showing the launcher first.
+
+You can also preview the current directory:
+
+```bash
+static .
+```
+
+Running Static without a folder opens the normal launcher:
+
+```bash
+static
+```
+
+## Your Browser, Your Choice
+
+Static doesn't lock you into a single browser.
+
+When you open a preview, Static detects the browsers installed on your Mac and provides quick shortcuts to open the current project in them.
+
+This makes it easy to test your website across different browsers without manually finding the project URL every time.
+
+## Built for macOS
+
+Static is designed specifically around the macOS experience.
+
+It takes advantage of familiar design patterns such as:
+
+* Translucent windows
+* Native window controls
+* Smooth animations
+* Minimal toolbars
+* Quick Look-inspired previews
+* Native file selection
+* Installed application detection
+
+The goal isn't to make a generic cross-platform tool.
+
+**Static is made to feel like a Mac app.**
+
+## Who Is Static For?
+
+### Web Developers
+
+Quickly preview websites while working on HTML, CSS, and JavaScript without repeatedly setting up a server.
+
+### Designers
+
+Preview static designs and prototypes without needing a full development environment.
+
+### Students
+
+Experiment with websites and projects without having to learn complicated tooling first.
+
+### Anyone Working With Local Websites
+
+If you have a folder containing a website, Static gives you an easy way to see it.
+
+## Use Cases
+
+Static is useful for:
+
+* HTML/CSS/JavaScript projects
+* Website prototypes
+* Static websites
+* Documentation sites
+* Design mockups
+* Web experiments
+* School projects
+* Landing pages
+* Local website testing
+* Quick browser testing
+
+## Why Static?
+
+Static is built around one idea:
+
+> **Local websites shouldn't require a complicated workflow just to preview them.**
+
+Open Static, choose your folder, and get straight to your website.
+
+No configuration screens.
+
+No project setup.
+
+No unnecessary complexity.
+
+Just **Static**.
+
+## Development
+
+Clone the repository and install the required dependencies:
+
+```bash
+git clone https://github.com/AetherCodez/Static.git
+cd Static
 npm install
+```
+
+Start Static in development mode:
+
+```bash
 npm start
 ```
 
-## Project structure
+### Building
 
-```
-static-app/
-├── package.json
-├── main.js                  # Electron main process: windows, server, IPC
-├── preload.js                # contextBridge for the launcher window
-├── preload-preview.js        # contextBridge for the preview window
-├── renderer/
-│   ├── launcher.html/.css/.js   # frosted-glass drop zone screen
-│   └── preview.html/.css/.js    # Quick-Look style preview + toolbar
-└── assets/                   # (optional) app icon for packaging
-```
-
-## How it works
-
-1. **Launcher window** — frameless, transparent, `vibrancy: 'fullscreen-ui'`.
-   Drag a folder in, or click Browse (native `dialog.showOpenDialog`).
-2. **Server spawn** — `main.js` runs `python3 -m http.server 9090` with `cwd`
-   set to the chosen folder, and polls `http://localhost:9090` with a raw
-   `http.get` loop until it responds (up to 8s timeout).
-3. **Preview window** — a second frameless/transparent/vibrant
-   (`vibrancy: 'hud'`) `BrowserWindow` fades and scales in (`window-in`
-   keyframes, 260ms) once the launcher closes. The served page itself is
-   rendered by a `WebContentsView` attached directly to the window by
-   `main.js` and positioned to exactly fill the area below the toolbar —
-   not a `<webview>` guest tag, which is more prone to silently failing to
-   load.
-4. **Toolbar** — real installed-browser icons are detected by checking
-   `/Applications/*.app`, pulling each app's actual icon via
-   `app.getFileIcon()`, and falling back to reading the `.icns` directly out
-   of the bundle's `Info.plist` if that returns nothing. Only installed
-   browsers render, each with its real icon. Reload / DevTools / Open /
-   Close are icon-only buttons on the right, separated by a hairline
-   divider — DevTools opens Electron's actual inspector on the live served
-   page (detached window), rather than launching a browser.
-5. **Shutdown** — the ✕ button (or closing the preview window) sends
-   `SIGTERM` to the Python process and quits the app.
-
-## CLI usage — `static ~/Folder`
-
-Yes, once set up:
-
-```bash
-static ~/Projects/my-site   # opens straight to the preview, skips the launcher
-static .                    # serve the current directory
-static                      # no folder → shows the drag & drop launcher, as normal
-```
-
-To wire the command up:
-
-```bash
-cd static-app
-npm install
-ln -s "$(pwd)/bin/static" /usr/local/bin/static   # Apple Silicon: /opt/homebrew/bin/static
-```
-
-(`bin/static` just calls the local `electron` binary with the project folder
-as its entry point, so it needs `npm install` run once first. `package.json`
-also declares a `bin` field, so `npm link` works as an alternative to the
-symlink above if you'd rather not touch `/usr/local/bin` by hand.)
-
-## Packaging
-
-`electron-builder` config is included in `package.json`. Add a `.icns` file
-at `assets/icon.icns` and run:
+Static can also be packaged as a native macOS application:
 
 ```bash
 npm run dist
 ```
+
+The resulting application can be installed and launched like any other Mac app.
+
+## Contributing
+
+Contributions are welcome!
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/improvement`)
+3. Make your changes
+4. Commit your changes (`git commit -m 'Add improvement'`)
+5. Push your branch (`git push origin feature/improvement`)
+6. Open a Pull Request
+
+For larger changes, opening an issue first is recommended so the idea can be discussed before implementation.
+
+## License
+
+Static is released under the **MIT License**.
+
+See [LICENSE](LICENSE) for the full license text.
+
+## Support
+
+* **Issues**: [GitHub Issues](https://github.com/AetherCodez/Static/issues)
+* **Discussions**: [GitHub Discussions](https://github.com/AetherCodez/Static/discussions)
+* **Source Code**: [GitHub Repository](https://github.com/AetherCodez/Static)
+* **Star the repository** if you like Static!
+
+---
+
+<p align="center">
+  Made for macOS.
+</p>
+
+<p align="center">
+  <strong>Drop a folder. Preview your website. That's Static.</strong>
+</p>
