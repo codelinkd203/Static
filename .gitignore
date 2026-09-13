@@ -1,0 +1,47 @@
+# Dependencies
+
+node_modules/
+
+# Build output
+
+dist/
+output/
+
+# Package lock
+
+package-lock.json
+
+# macOS
+
+.DS_Store
+
+# Logs
+
+*.log
+logs.txt
+
+# Electron Builder
+
+*.blockmap
+latest-mac.yml
+
+# Temporary / cache files
+
+.cache/
+.tmp/
+temp/
+
+# IDE / editor
+
+.vscode/
+.idea/
+
+# OS metadata
+
+Thumbs.db
+
+# Environment / secrets
+
+.env
+.env.*
+!.env.example
