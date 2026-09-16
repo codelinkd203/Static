@@ -1,6 +1,6 @@
 {
   "name": "static",
-  "version": "2.0.1",
+  "version": "3.0.0",
   "description": "Instant Local Web Preview — drop a folder, serve it, preview it.",
   "main": "main.js",
   "author": "Static",
@@ -11,10 +11,10 @@
   },
   "scripts": {
     "start": "electron .",
-    "dist": "electron-builder"
+    "build": "node build.js"
   },
   "devDependencies": {
-    "electron": "^30.0.0",
+    "electron": "30.0.0",
     "electron-builder": "^24.13.3"
   },
   "build": {
@@ -33,4 +33,4 @@
       "icon": "logos.icns"
     }
   }
-}   
+}

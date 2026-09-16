@@ -11,6 +11,12 @@ const reloadBtn = document.getElementById('reloadBtn');
 const devtoolsBtn = document.getElementById('devtoolsBtn');
 const consoleErrorBadge = document.getElementById('consoleErrorBadge');
 const openBtn = document.getElementById('openBtn');
+const appBrandBtn = document.getElementById('appBrandBtn');
+
+appBrandBtn.addEventListener('click', () => {
+  window.previewAPI.openSettings();
+});
+
 const closeBtn = document.getElementById('closeBtn');
 
 let browsers = [];
@@ -80,39 +86,73 @@ window.previewAPI.onTabsChanged(({ tabs: nextTabs, activeTabId: nextActiveTabId 
   }
 });
 
+// Keyed diff instead of wiping and rebuilding every pill on every update —
+// title/error changes happen constantly, and re-creating the DOM each time
+// was killing hover states and replaying transitions (the "janky" tab feel).
+const tabPillEls = new Map(); // tabId -> pill element
+
 function renderTabs() {
   if (!tabStripEl) return;
-  tabStripEl.innerHTML = '';
-  if (!tabs || tabs.length <= 1) {
-    tabStripEl.style.display = 'none';
-    return;
-  }
 
-  tabStripEl.style.display = 'flex';
-  tabs.forEach((tab) => {
-    const pill = document.createElement('div');
-    pill.className = 'tab-pill' + (tab.id === activeTabId ? ' active' : '');
+  tabStripEl.style.display = tabs && tabs.length > 1 ? 'flex' : 'none';
+
+  const seen = new Set();
+
+  (tabs || []).forEach((tab, index) => {
+    seen.add(tab.id);
+    let pill = tabPillEls.get(tab.id);
+
+    if (!pill) {
+      pill = document.createElement('div');
+      pill.className = 'tab-pill tab-pill-entering';
+
+      const label = document.createElement('span');
+      label.className = 'tab-title';
+      label.addEventListener('click', () => window.previewAPI.selectTab(tab.id));
+      pill.appendChild(label);
+
+      const close = document.createElement('button');
+      close.textContent = '×';
+      close.title = 'Close tab';
+      close.addEventListener('click', (event) => {
+        event.stopPropagation();
+        window.previewAPI.closeTab(tab.id);
+      });
+      pill.appendChild(close);
+
+      tabPillEls.set(tab.id, pill);
+      tabStripEl.appendChild(pill);
+      // Let the browser paint the "entering" state before removing it, so
+      // the scale/opacity transition actually has something to animate from.
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        pill.classList.remove('tab-pill-entering');
+      }));
+    }
+
+    // Keep DOM order in sync with tab order without touching pills that are
+    // already in the right place (avoids restyle/reflow thrash).
+    const currentNodeAtIndex = tabStripEl.children[index];
+    if (currentNodeAtIndex !== pill) {
+      tabStripEl.insertBefore(pill, currentNodeAtIndex || null);
+    }
+
+    pill.classList.toggle('active', tab.id === activeTabId);
     pill.title = tab.url || tab.title || 'Preview';
-
-    const label = document.createElement('span');
-    label.className = 'tab-title';
-    label.textContent = tab.title || 'Preview';
-    label.addEventListener('click', () => {
-      window.previewAPI.selectTab(tab.id);
-    });
-
-    const close = document.createElement('button');
-    close.textContent = '×';
-    close.title = 'Close tab';
-    close.addEventListener('click', (event) => {
-      event.stopPropagation();
-      window.previewAPI.closeTab(tab.id);
-    });
-
-    pill.appendChild(label);
-    pill.appendChild(close);
-    tabStripEl.appendChild(pill);
+    const label = pill.querySelector('.tab-title');
+    if (label.textContent !== (tab.title || 'Preview')) {
+      label.textContent = tab.title || 'Preview';
+    }
   });
+
+  // Animate out and remove any pill whose tab is gone.
+  for (const [tabId, pill] of tabPillEls) {
+    if (seen.has(tabId)) continue;
+    tabPillEls.delete(tabId);
+    pill.classList.add('tab-pill-leaving');
+    pill.addEventListener('transitionend', () => pill.remove(), { once: true });
+    // Safety net in case no transition fires (e.g. reduced-motion settings).
+    setTimeout(() => pill.remove(), 250);
+  }
 }
 
 // --- Browser icon row -------------------------------------------------

@@ -29,6 +29,101 @@ let servingPort = 9090;
 let servingFolder = null;
 
 // ---------------------------------------------------------------------------
+// Persisted settings (currently just the reload-notice prefs; a future
+// Settings window will read/write the same file).
+// ---------------------------------------------------------------------------
+let appSettings = {
+  autoReload: false,
+  suppressReloadToast: false,
+  devtoolsErrorCounterEnabled: true,
+  devtoolsDetached: false, // false = docked inside the preview window
+};
+
+function settingsFilePath() {
+  return path.join(app.getPath('userData'), 'settings.json');
+}
+
+function loadSettings() {
+  try {
+    const raw = fs.readFileSync(settingsFilePath(), 'utf8');
+    appSettings = { ...appSettings, ...JSON.parse(raw) };
+  } catch {
+    // No settings file yet (first run) — defaults stand.
+  }
+}
+
+function saveSettings() {
+  try {
+    fs.mkdirSync(path.dirname(settingsFilePath()), { recursive: true });
+    fs.writeFileSync(settingsFilePath(), JSON.stringify(appSettings, null, 2));
+  } catch (err) {
+    console.error('[Static] Failed to save settings:', err.message || err);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Folder watcher — detects source changes in the served folder and either
+// auto-reloads or shows the "Reload?" notice, depending on settings.
+// ---------------------------------------------------------------------------
+let folderWatcher = null;
+let reloadDebounceTimer = null;
+
+function startFolderWatcher(folderPath) {
+  stopFolderWatcher();
+  try {
+    folderWatcher = fs.watch(folderPath, { recursive: true }, (_eventType, filename) => {
+      // Ignore VCS/dependency noise so saving inside .git or node_modules
+      // doesn't trigger a false "your code changed" notice.
+      if (filename && /(^|[/\\])(\.git|node_modules)([/\\]|$)/.test(filename)) return;
+      clearTimeout(reloadDebounceTimer);
+      reloadDebounceTimer = setTimeout(handleCodeChange, 250);
+    });
+    folderWatcher.on('error', (err) => {
+      console.error('[Static] Folder watcher error:', err.message || err);
+    });
+  } catch (err) {
+    console.error('[Static] Could not watch folder for changes:', err.message || err);
+  }
+}
+
+function stopFolderWatcher() {
+  if (folderWatcher) {
+    try {
+      folderWatcher.close();
+    } catch {
+      /* already closed */
+    }
+    folderWatcher = null;
+  }
+  clearTimeout(reloadDebounceTimer);
+}
+
+function reloadAllLocalTabs() {
+  for (const state of previewWindows) {
+    for (const tab of state.tabs) {
+      const wc = tab.view?.webContents;
+      if (wc && !wc.isDestroyed() && isLocalOrigin(tab.url || '')) {
+        wc.reload();
+      }
+    }
+  }
+}
+
+function handleCodeChange() {
+  if (appSettings.autoReload) {
+    reloadAllLocalTabs();
+    return;
+  }
+  if (appSettings.suppressReloadToast) return;
+
+  for (const state of previewWindows) {
+    if (state.win.isDestroyed() || !state.toastView) continue;
+    state.toastView.setVisible(true);
+    state.toastView.webContents.send('reload-toast-show');
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Browser detection (macOS) — real installed apps only, real icons
 // ---------------------------------------------------------------------------
 const BROWSER_CANDIDATES = [
@@ -148,6 +243,7 @@ function openUrlInBrowser(appName, url) {
 // Local server lifecycle
 // ---------------------------------------------------------------------------
 function killServer() {
+  stopFolderWatcher();
   if (serverProcess && !serverProcess.killed) {
     try {
       serverProcess.kill('SIGTERM');
@@ -227,6 +323,48 @@ function waitForServerReady(url, timeoutMs = 8000) {
 // ---------------------------------------------------------------------------
 // Windows
 // ---------------------------------------------------------------------------
+let settingsWin = null;
+
+function createSettingsWindow() {
+  if (settingsWin && !settingsWin.isDestroyed()) {
+    settingsWin.show();
+    settingsWin.focus();
+    return;
+  }
+
+  settingsWin = new BrowserWindow({
+    width: 420,
+    height: 560,
+    resizable: false,
+    fullscreenable: false,
+    maximizable: false,
+    minimizable: true,
+    frame: false,
+    transparent: true,
+    backgroundColor: '#00000000',
+    hasShadow: true,
+    vibrancy: 'fullscreen-ui',
+    visualEffectState: 'active',
+    titleBarStyle: 'hiddenInset',
+    show: false,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload-settings.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+
+  settingsWin.loadFile(path.join(__dirname, 'renderer', 'settings.html'));
+
+  settingsWin.once('ready-to-show', () => {
+    settingsWin.show();
+  });
+
+  settingsWin.on('closed', () => {
+    settingsWin = null;
+  });
+}
+
 function createLauncherWindow() {
   launcherWin = new BrowserWindow({
     width: 620,
@@ -271,6 +409,29 @@ function getPreviewState(win) {
   return previewWindows.find((entry) => entry.win === win) || null;
 }
 
+function getLocalOrigin() {
+  return `http://localhost:${servingPort}`;
+}
+
+function isLocalOrigin(targetUrl) {
+  try {
+    return new URL(targetUrl).origin === getLocalOrigin();
+  } catch {
+    return false;
+  }
+}
+
+// Shared by the toolbar devtools button and the View-menu shortcut so both
+// respect the "open DevTools inline" setting instead of always popping out.
+function toggleTabDevTools(wc) {
+  if (!wc || wc.isDestroyed()) return;
+  if (wc.isDevToolsOpened()) {
+    wc.closeDevTools();
+  } else {
+    wc.openDevTools({ mode: appSettings.devtoolsDetached ? 'detach' : 'right' });
+  }
+}
+
 function getActiveTab(state) {
   return state?.tabs.find((tab) => tab.id === state.activeTabId) || state?.tabs[0] || null;
 }
@@ -288,6 +449,8 @@ function findOwnerTab(webContentsId) {
 }
 
 function bumpTabErrorCount(win, tab, message) {
+  if (!appSettings.devtoolsErrorCounterEnabled) return;
+
   tab.consoleErrors = (tab.consoleErrors || 0) + 1;
 
   console.log(
@@ -375,6 +538,17 @@ function updatePreviewViewBounds(win) {
     width,
     height: Math.max(0, height - TOOLBAR_HEIGHT - tabBarHeight),
   });
+
+  if (state.toastView) {
+    const toastWidth = 280;
+    const toastHeight = 200;
+    state.toastView.setBounds({
+      x: Math.max(0, width - toastWidth - 14),
+      y: TOOLBAR_HEIGHT + tabBarHeight + 10,
+      width: Math.min(toastWidth, width),
+      height: toastHeight,
+    });
+  }
 }
 
 function sendLoadState(win, loading) {
@@ -465,6 +639,13 @@ function addPreviewTab(win, { url, title = 'Preview', startPath = '/', loadImmed
   win.contentView.addChildView(previewView);
   previewView.setVisible(false);
 
+  // Re-raise the reload-notice overlay above this new tab view — adding a
+  // child view always stacks it on top, so without this the very first tab
+  // (added after the overlay is created) would bury it again.
+  if (state.toastView) {
+    win.contentView.addChildView(state.toastView);
+  }
+
   const tab = {
     id: tabId,
     title,
@@ -480,6 +661,8 @@ function addPreviewTab(win, { url, title = 'Preview', startPath = '/', loadImmed
   tab.consoleErrors = 0;
 
   function reportConsoleError(message = '') {
+    if (!appSettings.devtoolsErrorCounterEnabled) return;
+
     tab.consoleErrors = (tab.consoleErrors || 0) + 1;
 
     console.log(
@@ -547,6 +730,15 @@ function addPreviewTab(win, { url, title = 'Preview', startPath = '/', loadImmed
   // status codes and webRequest can see both main-frame and subresource
   // requests in one place.
   wc.on('did-navigate', () => {
+    // A full navigation — reload, redirect, link click, back/forward, or a
+    // fresh URL — starts a clean slate for the error count. (In-page
+    // navigations like hash changes/pushState are handled separately below
+    // and don't reset it, since the page itself hasn't actually reloaded.)
+    tab.consoleErrors = 0;
+    if (!win.isDestroyed()) {
+      win.webContents.send('preview-console-error', { tabId: tab.id, count: 0 });
+    }
+
     tab.url = wc.getURL() || tab.url;
     tab.origin = new URL(tab.url || url).origin;
     sendNavState(win);
@@ -575,9 +767,36 @@ function addPreviewTab(win, { url, title = 'Preview', startPath = '/', loadImmed
   });
 
   wc.setWindowOpenHandler(({ url: popupUrl }) => {
-    const popupTab = addPreviewTab(win, { url: popupUrl, title: popupUrl, loadImmediately: true });
-    if (popupTab) activateTab(win, popupTab.id);
+    if (isLocalOrigin(popupUrl)) {
+      const popupTab = addPreviewTab(win, { url: popupUrl, title: popupUrl, loadImmediately: true });
+      if (popupTab) activateTab(win, popupTab.id);
+    } else {
+      // window.open()/target="_blank" to somewhere outside the served
+      // folder — hand it to the system browser instead of opening a tab
+      // in the app.
+      shell.openExternal(popupUrl);
+    }
     return { action: 'deny' };
+  });
+
+  // Top-level link clicks / location changes to another origin go to the
+  // system browser. Same-origin navigation (anything inside the served
+  // folder) is left alone and proceeds normally. Iframes are untouched —
+  // these events only fire for the top frame.
+  wc.on('will-navigate', (event, navigationUrl) => {
+    if (!isLocalOrigin(navigationUrl)) {
+      event.preventDefault();
+      shell.openExternal(navigationUrl);
+    }
+  });
+
+  // Server-side redirects (3xx) that land outside the served folder — e.g.
+  // an OAuth bounce — get the same treatment as a direct navigation.
+  wc.on('will-redirect', (event, navigationUrl) => {
+    if (!isLocalOrigin(navigationUrl)) {
+      event.preventDefault();
+      shell.openExternal(navigationUrl);
+    }
   });
 
   const initialPreviewUrl = new URL(startPath || '/', url).toString();
@@ -642,6 +861,27 @@ function createPreviewWindow(url, startPath = '/') {
   });
 
   previewWindows.push({ win: previewWin, tabs: [], activeTabId: null });
+
+  // Small overlay view for the "Reload?" code-change notice. It's a
+  // separate native WebContentsView (not part of preview.html's own DOM)
+  // because the live-preview WebContentsView is layered on top of
+  // preview.html and would otherwise cover anything drawn inside it. Added
+  // after the tab views so it stacks above them; kept invisible until
+  // there's actually something to show, so it doesn't eat clicks over
+  // that corner of the preview the rest of the time.
+  const toastView = new WebContentsView({
+    webPreferences: {
+      preload: path.join(__dirname, 'preload-reload-toast.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+  toastView.setBackgroundColor('#00000000');
+  previewWin.contentView.addChildView(toastView);
+  toastView.setVisible(false);
+  toastView.webContents.loadFile(path.join(__dirname, 'renderer', 'reload-toast.html'));
+  getPreviewState(previewWin).toastView = toastView;
+
   updatePreviewViewBounds(previewWin);
 
   previewWin.on('resize', () => updatePreviewViewBounds(previewWin));
@@ -671,9 +911,18 @@ function createPreviewWindow(url, startPath = '/') {
   return previewWin;
 }
 
-// ---------------------------------------------------------------------------
-// Shared "boot a folder" flow — used by the launcher UI AND the CLI
-// ---------------------------------------------------------------------------
+async function switchToFolder(folderPath) {
+  // Static only ever runs one session — close whatever's currently being
+  // previewed before starting the new one, rather than trying to run two
+  // servers on the same port.
+  killServer();
+  for (const state of [...previewWindows]) {
+    if (!state.win.isDestroyed()) state.win.close();
+  }
+  previewWindows = [];
+  await launchFolder(folderPath);
+}
+
 async function launchFolder(folderPath, startPath = '/') {
   const resolved = path.resolve(folderPath.replace(/^~(?=$|\/)/, os.homedir()));
 
@@ -693,6 +942,7 @@ async function launchFolder(folderPath, startPath = '/') {
   await startHttpServer(resolved, servingPort);
   const url = `http://localhost:${servingPort}`;
   await waitForServerReady(url);
+  startFolderWatcher(resolved);
   createPreviewWindow(url, startPath);
   return url;
 }
@@ -747,12 +997,8 @@ ipcMain.on('open-in-browser', (event, { appName, url }) => {
 ipcMain.on('open-native-devtools', (event) => {
   const win = BrowserWindow.fromWebContents(event.sender);
   const state = getPreviewState(win);
-  // Real DevTools, inspecting the actual served page — detached so it
-  // doesn't eat into the preview window's own layout.
   const activeTab = getActiveTab(state);
-  if (activeTab?.view) {
-    activeTab.view.webContents.openDevTools({ mode: 'detach' });
-  }
+  if (activeTab?.view) toggleTabDevTools(activeTab.view.webContents);
 });
 
 ipcMain.on('reload-preview', (event) => {
@@ -760,6 +1006,42 @@ ipcMain.on('reload-preview', (event) => {
   const state = getPreviewState(win);
   const activeTab = getActiveTab(state);
   if (activeTab?.view) activeTab.view.webContents.reload();
+});
+
+function findStateByToastWebContentsId(id) {
+  return previewWindows.find((state) => state.toastView?.webContents.id === id) || null;
+}
+
+ipcMain.handle('get-reload-settings', () => ({ ...appSettings }));
+
+ipcMain.on('set-reload-setting', (_event, { key, value } = {}) => {
+  if (key !== 'autoReload' && key !== 'suppressReloadToast') return;
+  appSettings[key] = !!value;
+  saveSettings();
+});
+
+ipcMain.handle('get-app-settings', () => ({ ...appSettings }));
+
+ipcMain.on('set-app-setting', (_event, { key, value } = {}) => {
+  const booleanKeys = ['autoReload', 'suppressReloadToast', 'devtoolsErrorCounterEnabled', 'devtoolsDetached'];
+  if (!booleanKeys.includes(key)) return;
+  appSettings[key] = !!value;
+  saveSettings();
+});
+
+ipcMain.on('open-settings', () => createSettingsWindow());
+
+ipcMain.on('reload-toast-reload-now', (event) => {
+  const state = findStateByToastWebContentsId(event.sender.id);
+  const activeTab = getActiveTab(state);
+  if (activeTab?.view && !activeTab.view.webContents.isDestroyed()) {
+    activeTab.view.webContents.reload();
+  }
+});
+
+ipcMain.on('reload-toast-hide-native', (event) => {
+  const state = findStateByToastWebContentsId(event.sender.id);
+  if (state?.toastView) state.toastView.setVisible(false);
 });
 
 ipcMain.on('nav-back', (event) => {
@@ -847,6 +1129,8 @@ function installPreviewKeyboardShortcuts() {
             submenu: [
               { label: 'About Static', role: 'about' },
               { type: 'separator' },
+              { label: 'Settings…', accelerator: 'Cmd+,', click: () => createSettingsWindow() },
+              { type: 'separator' },
               { role: 'services' },
               { type: 'separator' },
               { role: 'hide' },
@@ -885,7 +1169,7 @@ function installPreviewKeyboardShortcuts() {
             const state = getPreviewState(browserWindow);
             const activeTab = getActiveTab(state);
             if (activeTab?.view && !activeTab.view.webContents.isDestroyed()) {
-              activeTab.view.webContents.toggleDevTools();
+              toggleTabDevTools(activeTab.view.webContents);
             }
           },
         },
@@ -1015,6 +1299,7 @@ function installPreviewKeyboardShortcuts() {
 // App lifecycle
 // ---------------------------------------------------------------------------
 app.whenReady().then(async () => {
+  loadSettings();
   installPreviewKeyboardShortcuts();
 
   const cliFolder = resolveCliFolder();

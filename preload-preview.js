@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld('previewAPI', {
   closeTab: (tabId) => ipcRenderer.send('close-preview-tab', { tabId }),
   stopAndClose: () => ipcRenderer.send('stop-and-close'),
   minimizeWindow: () => ipcRenderer.send('minimize-window'),
+  openSettings: () => ipcRenderer.send('open-settings'),
 
   onLoadState: (callback) =>
     ipcRenderer.on('preview-load-state', (_event, state) => callback(state)),
