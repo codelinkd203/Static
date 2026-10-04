@@ -147,7 +147,7 @@ async function installUpdate(version) {
     const appName = fs.readdirSync(mnt).find((n) => n.endsWith('.app'));
     if (!appName) throw new Error('No app found inside the downloaded disk image.');
 
-    fs.rmSync(staged, { recursive: true, force: true });
+    await run('/bin/rm', ['-rf', staged]);
     await run('/usr/bin/ditto', [path.join(mnt, appName), staged]);
 
     if (!fs.existsSync(path.join(staged, 'Contents', 'MacOS'))) {
@@ -158,7 +158,7 @@ async function installUpdate(version) {
       throw new Error(`Expected Static ${version} but the download contained ${gotVersion || 'an unknown version'}.`);
     }
   } catch (err) {
-    fs.rmSync(staged, { recursive: true, force: true });
+    await run('/bin/rm', ['-rf', staged]);
     throw err;
   } finally {
     if (mounted) await run('/usr/bin/hdiutil', ['detach', mnt, '-force']).catch(() => {});
