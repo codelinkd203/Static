@@ -15,6 +15,7 @@ const fs = require('fs');
 const os = require('os');
 const http = require('http');
 const { spawn, execFileSync } = require('child_process');
+const { checkForUpdates } = require('./updater');
 
 const TOOLBAR_HEIGHT = 44;
 const TAB_BAR_HEIGHT = 32;
@@ -1128,6 +1129,7 @@ function installPreviewKeyboardShortcuts() {
             label: 'Static',
             submenu: [
               { label: 'About Static', role: 'about' },
+              { label: 'Check for Updates…', click: () => checkForUpdates({ manual: true }) },
               { type: 'separator' },
               { label: 'Settings…', accelerator: 'Cmd+,', click: () => createSettingsWindow() },
               { type: 'separator' },
@@ -1313,6 +1315,9 @@ app.whenReady().then(async () => {
   } else {
     createLauncherWindow();
   }
+
+  // Quietly look for a newer version a moment after launch.
+  setTimeout(() => checkForUpdates(), 2000);
 });
 
 app.on('window-all-closed', () => {
