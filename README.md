@@ -4,6 +4,13 @@
   </a>
 </p>
 
+<p align="center">
+  <img src="https://img.shields.io/github/stars/codelinkd203/Static?style=for-the-badge&color=ffffff&labelColor=000000" alt="GitHub Stars"/>
+  <img src="https://img.shields.io/github/issues/codelinkd203/Static?style=for-the-badge&color=ffffff&labelColor=000000" alt="GitHub Issues"/>
+  <img src="https://img.shields.io/github/forks/codelinkd203/Static?style=for-the-badge&color=ffffff&labelColor=000000" alt="GitHub Forks"/>
+  <img src="https://img.shields.io/github/commit-activity/y/codelinkd203/Static?style=for-the-badge&color=ffffff&labelColor=000000" alt="Activity"/>
+</p>
+
 <h1 align="center">Static</h1>
 
 <p align="center">
