@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld('previewAPI', {
   openInBrowser: (appName, url) => ipcRenderer.send('open-in-browser', { appName, url }),
   openNativeDevtools: () => ipcRenderer.send('open-native-devtools'),
   reloadPreview: () => ipcRenderer.send('reload-preview'),
+  toggleQr: () => ipcRenderer.send('toggle-qr'),
   navBack: () => ipcRenderer.send('nav-back'),
   navForward: () => ipcRenderer.send('nav-forward'),
   navigateTo: (url) => ipcRenderer.send('navigate-preview', { url }),

@@ -237,7 +237,7 @@ async function detectInstalledBrowsers() {
 function openUrlInBrowser(appName, url) {
   // `open -a "App Name" url` is the correct, sandbox-safe way to target
   // a specific installed browser on macOS.
-  spawn('open', ['-a', appName, url], { detached: true, stdio: 'ignore' }).unref();
+  spawn('open', ['-a', appName, withNoCache(url)], { detached: true, stdio: 'ignore' }).unref();
 }
 
 // ---------------------------------------------------------------------------
@@ -391,6 +391,20 @@ function createLauncherWindow() {
 
   launcherWin.loadFile(path.join(__dirname, 'renderer', 'launcher.html'));
 
+  // The footer links (GitHub / Feedback) use target="_system", which Electron
+  // treats as a new window. Send any http(s) link to the real browser instead
+  // of opening a window or navigating the launcher away.
+  launcherWin.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:\/\//i.test(url)) shell.openExternal(url);
+    return { action: 'deny' };
+  });
+  launcherWin.webContents.on('will-navigate', (event, url) => {
+    if (/^https?:\/\//i.test(url)) {
+      event.preventDefault();
+      shell.openExternal(url);
+    }
+  });
+
   launcherWin.once('ready-to-show', () => {
     launcherWin.show();
   });
@@ -420,6 +434,84 @@ function isLocalOrigin(targetUrl) {
   } catch {
     return false;
   }
+}
+
+// Adds a random ?static-nocache=... to local URLs handed to an external
+// browser, so it never serves a stale cached copy of the previewed site.
+// Non-local URLs pass through untouched.
+function withNoCache(targetUrl) {
+  try {
+    if (!isLocalOrigin(targetUrl)) return targetUrl;
+    const u = new URL(targetUrl);
+    u.searchParams.set(
+      'static-nocache',
+      `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`
+    );
+    return u.toString();
+  } catch {
+    return targetUrl;
+  }
+}
+
+// Best guess at this Mac's LAN address: prefer private-range IPv4 on en*
+// (Wi-Fi/Ethernet) over VPN/tunnel interfaces, and skip link-local 169.254.x.
+function getLanIp() {
+  const isPrivate = (a) => /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(a);
+  const candidates = [];
+  for (const [name, addrs] of Object.entries(os.networkInterfaces())) {
+    for (const a of addrs || []) {
+      if ((a.family === 'IPv4' || a.family === 4) && !a.internal && !a.address.startsWith('169.254.')) {
+        candidates.push({ name, address: a.address });
+      }
+    }
+  }
+  const pick =
+    candidates.find((c) => /^en\d+$/.test(c.name) && isPrivate(c.address)) ||
+    candidates.find((c) => isPrivate(c.address)) ||
+    candidates[0];
+  return pick ? pick.address : null;
+}
+
+// QR popover — a separate native view for the same reason as the reload
+// toast: the live preview is a WebContentsView layered over preview.html, so
+// a dropdown drawn inside preview.html would be hidden behind it.
+function showQrPopover(win) {
+  const state = getPreviewState(win);
+  if (!state || win.isDestroyed()) return;
+
+  if (!state.qrView) {
+    state.qrView = new WebContentsView({
+      webPreferences: {
+        preload: path.join(__dirname, 'preload-qr.js'),
+        contextIsolation: true,
+        nodeIntegration: false,
+      },
+    });
+    state.qrView.setBackgroundColor('#00000000');
+    state.qrView.setVisible(false);
+  }
+
+  const view = state.qrView;
+  state.qrOpen = true;
+  win.contentView.addChildView(view); // re-adding moves it to the top of the stack
+  updatePreviewViewBounds(win);
+
+  // Reload each time so the IP is always current (Wi-Fi can change).
+  view.webContents.once('did-finish-load', () => {
+    if (!state.qrOpen || view.webContents.isDestroyed()) return;
+    view.setVisible(true);
+    view.webContents.focus();
+  });
+  view.webContents.loadFile(path.join(__dirname, 'renderer', 'qr-popover.html'), {
+    query: { ip: getLanIp() || '', port: String(servingPort) },
+  });
+}
+
+function hideQrPopover(win) {
+  const state = getPreviewState(win);
+  if (!state) return;
+  state.qrOpen = false;
+  if (state.qrView && !state.qrView.webContents.isDestroyed()) state.qrView.setVisible(false);
 }
 
 // Shared by the toolbar devtools button and the View-menu shortcut so both
@@ -550,6 +642,17 @@ function updatePreviewViewBounds(win) {
       height: toastHeight,
     });
   }
+
+  // The QR popover covers the preview area so a click outside its card
+  // closes it.
+  if (state.qrView) {
+    state.qrView.setBounds({
+      x: 0,
+      y: TOOLBAR_HEIGHT + tabBarHeight,
+      width,
+      height: Math.max(0, height - TOOLBAR_HEIGHT - tabBarHeight),
+    });
+  }
 }
 
 function sendLoadState(win, loading) {
@@ -645,6 +748,9 @@ function addPreviewTab(win, { url, title = 'Preview', startPath = '/', loadImmed
   // (added after the overlay is created) would bury it again.
   if (state.toastView) {
     win.contentView.addChildView(state.toastView);
+  }
+  if (state.qrView && state.qrOpen) {
+    win.contentView.addChildView(state.qrView);
   }
 
   const tab = {
@@ -1002,6 +1108,19 @@ ipcMain.on('open-native-devtools', (event) => {
   if (activeTab?.view) toggleTabDevTools(activeTab.view.webContents);
 });
 
+ipcMain.on('toggle-qr', (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (!win) return;
+  const state = getPreviewState(win);
+  if (state?.qrOpen) hideQrPopover(win);
+  else showQrPopover(win);
+});
+
+ipcMain.on('qr-close', (event) => {
+  const state = previewWindows.find((s) => s.qrView?.webContents.id === event.sender.id);
+  if (state) hideQrPopover(state.win);
+});
+
 ipcMain.on('reload-preview', (event) => {
   const win = BrowserWindow.fromWebContents(event.sender);
   const state = getPreviewState(win);
@@ -1260,7 +1379,7 @@ function installPreviewKeyboardShortcuts() {
           accelerator: 'CmdOrCtrl+Shift+O',
           click: (_menuItem, browserWindow) => {
             const activeTab = getActiveTab(getPreviewState(browserWindow));
-            if (activeTab?.url) shell.openExternal(activeTab.url);
+            if (activeTab?.url) shell.openExternal(withNoCache(activeTab.url));
           },
         },
         { type: 'separator' },

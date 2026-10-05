@@ -8,6 +8,7 @@ const tabStripEl = document.getElementById('tabStrip');
 const backBtn = document.getElementById('backBtn');
 const forwardBtn = document.getElementById('forwardBtn');
 const reloadBtn = document.getElementById('reloadBtn');
+const phoneBtn = document.getElementById('phoneBtn');
 const devtoolsBtn = document.getElementById('devtoolsBtn');
 const consoleErrorBadge = document.getElementById('consoleErrorBadge');
 const openBtn = document.getElementById('openBtn');
@@ -209,6 +210,10 @@ forwardBtn.addEventListener('click', () => {
 
 reloadBtn.addEventListener('click', () => {
   window.previewAPI.reloadPreview();
+});
+
+phoneBtn.addEventListener('click', () => {
+  window.previewAPI.toggleQr();
 });
 
 devtoolsBtn.addEventListener('click', () => {
