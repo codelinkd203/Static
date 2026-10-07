@@ -19,7 +19,8 @@
     font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Helvetica Neue", sans-serif;
   }
 
-  /* Clicking the transparent margin around the card closes it. */
+  /* This view covers the preview area while open, so clicking anywhere
+     outside the card closes it. */
   .backdrop {
     position: absolute;
     inset: 0;
@@ -27,8 +28,8 @@
 
   .card {
     position: absolute;
-    top: 16px;
-    right: 29px;
+    top: 10px;
+    right: 14px;
     width: 232px;
     padding: 12px 12px 13px;
     border-radius: 12px;

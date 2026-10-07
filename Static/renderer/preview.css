@@ -26,7 +26,8 @@ html, body {
   flex-direction: column;
   border-radius: 12px;
   overflow: hidden;
-  background: #252528;
+  /* The 0.22 tint lives on .toolbar / .tab-strip instead: the native page
+     view covers everything else, so a full-window fill was invisible. */
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
   animation: window-in 260ms cubic-bezier(0.16, 1, 0.3, 1);
   transform-origin: center;
@@ -55,7 +56,9 @@ html, body {
   align-items: center;
   justify-content: space-between;
   padding: 0 12px 0 78px; /* left padding clears traffic-light buttons */
-  background: rgba(255, 255, 255, 0.03);
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.03)),
+    rgba(28, 28, 32, 0.22);
   box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.06);
   -webkit-app-region: drag;
 }
@@ -253,7 +256,6 @@ html, body {
   flex: 1;
   display: flex;
   flex-direction: column;
-  background: rgba(20, 20, 23, 0.4);
 }
 
 .tab-strip {
@@ -261,7 +263,9 @@ html, body {
   align-items: center;
   gap: 6px;
   padding: 6px 8px;
-  background: transparent;
+  background:
+    linear-gradient(rgba(20, 20, 23, 0.4), rgba(20, 20, 23, 0.4)),
+    rgba(28, 28, 32, 0.22);
   border-bottom: 1px solid rgba(255, 255, 255, 0.07);
   overflow-x: auto;
   scrollbar-width: none;
@@ -387,6 +391,11 @@ webview {
   border: 2px solid rgba(255, 255, 255, 0.15);
   border-top-color: rgba(255, 255, 255, 0.65);
   animation: spin 700ms linear infinite;
+}
+
+/* Hidden overlay = no animation frames. */
+.content-loading:not(.visible) .spinner {
+  animation-play-state: paused;
 }
 
 @keyframes spin {

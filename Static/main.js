@@ -472,55 +472,37 @@ function getLanIp() {
   return pick ? pick.address : null;
 }
 
-// QR popover — a small frameless child window under the toolbar's phone
-// button. (A window rather than a view layered over the page: the live page is
-// a WebContentsView, and stacking another native view on top of it crashed
-// Electron 30 on macOS.)
-const QR_WIN_WIDTH = 290;
-const QR_WIN_HEIGHT = 340;
-
+// QR popover — a separate native view for the same reason as the reload
+// toast: the live preview is a WebContentsView layered over preview.html, so
+// a dropdown drawn inside preview.html would be hidden behind it.
 function showQrPopover(win) {
   const state = getPreviewState(win);
   if (!state || win.isDestroyed()) return;
-  if (state.qrWin && !state.qrWin.isDestroyed()) return;
 
-  const cb = win.getContentBounds();
-  const qrWin = new BrowserWindow({
-    parent: win,
-    x: Math.round(cb.x + cb.width - QR_WIN_WIDTH + 15),
-    y: Math.round(cb.y + TOOLBAR_HEIGHT - 10),
-    width: QR_WIN_WIDTH,
-    height: QR_WIN_HEIGHT,
-    frame: false,
-    transparent: true,
-    backgroundColor: '#00000000',
-    hasShadow: false,
-    resizable: false,
-    movable: false,
-    minimizable: false,
-    maximizable: false,
-    fullscreenable: false,
-    skipTaskbar: true,
-    show: false,
-    webPreferences: {
-      preload: path.join(__dirname, 'preload-qr.js'),
-      contextIsolation: true,
-      nodeIntegration: false,
-    },
-  });
-  state.qrWin = qrWin;
+  if (!state.qrView) {
+    state.qrView = new WebContentsView({
+      webPreferences: {
+        preload: path.join(__dirname, 'preload-qr.js'),
+        contextIsolation: true,
+        nodeIntegration: false,
+      },
+    });
+    state.qrView.setBackgroundColor('#00000000');
+    state.qrView.setVisible(false);
+  }
 
-  qrWin.once('ready-to-show', () => {
-    if (!qrWin.isDestroyed()) qrWin.show();
-  });
-  // Clicking anywhere outside the popover dismisses it.
-  qrWin.on('blur', () => hideQrPopover(win));
-  qrWin.on('closed', () => {
-    if (state.qrWin === qrWin) state.qrWin = null;
-  });
+  const view = state.qrView;
+  state.qrOpen = true;
+  win.contentView.addChildView(view); // re-adding moves it to the top of the stack
+  updatePreviewViewBounds(win);
 
-  // Loaded fresh each time so the IP is always current (Wi-Fi can change).
-  qrWin.loadFile(path.join(__dirname, 'renderer', 'qr-popover.html'), {
+  // Reload each time so the IP is always current (Wi-Fi can change).
+  view.webContents.once('did-finish-load', () => {
+    if (!state.qrOpen || view.webContents.isDestroyed()) return;
+    view.setVisible(true);
+    view.webContents.focus();
+  });
+  view.webContents.loadFile(path.join(__dirname, 'renderer', 'qr-popover.html'), {
     query: { ip: getLanIp() || '', port: String(servingPort) },
   });
 }
@@ -528,10 +510,8 @@ function showQrPopover(win) {
 function hideQrPopover(win) {
   const state = getPreviewState(win);
   if (!state) return;
-  state.qrClosedAt = Date.now();
-  const qrWin = state.qrWin;
-  state.qrWin = null;
-  if (qrWin && !qrWin.isDestroyed()) qrWin.close();
+  state.qrOpen = false;
+  if (state.qrView && !state.qrView.webContents.isDestroyed()) state.qrView.setVisible(false);
 }
 
 // Shared by the toolbar devtools button and the View-menu shortcut so both
@@ -662,6 +642,17 @@ function updatePreviewViewBounds(win) {
       height: toastHeight,
     });
   }
+
+  // The QR popover covers the preview area so a click outside its card
+  // closes it.
+  if (state.qrView) {
+    state.qrView.setBounds({
+      x: 0,
+      y: TOOLBAR_HEIGHT + tabBarHeight,
+      width,
+      height: Math.max(0, height - TOOLBAR_HEIGHT - tabBarHeight),
+    });
+  }
 }
 
 function sendLoadState(win, loading) {
@@ -757,6 +748,9 @@ function addPreviewTab(win, { url, title = 'Preview', startPath = '/', loadImmed
   // (added after the overlay is created) would bury it again.
   if (state.toastView) {
     win.contentView.addChildView(state.toastView);
+  }
+  if (state.qrView && state.qrOpen) {
+    win.contentView.addChildView(state.qrView);
   }
 
   const tab = {
@@ -963,6 +957,8 @@ function createPreviewWindow(url, startPath = '/') {
     transparent: true,
     backgroundColor: '#00000000',
     hasShadow: true,
+    vibrancy: 'hud',
+    visualEffectState: 'active',
     show: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload-preview.js'),
@@ -1116,19 +1112,12 @@ ipcMain.on('toggle-qr', (event) => {
   const win = BrowserWindow.fromWebContents(event.sender);
   if (!win) return;
   const state = getPreviewState(win);
-  if (!state) return;
-  if (state.qrWin && !state.qrWin.isDestroyed()) {
-    hideQrPopover(win);
-  } else if (Date.now() - (state.qrClosedAt || 0) > 300) {
-    // (the click that just dismissed the popover via blur shouldn't reopen it)
-    showQrPopover(win);
-  }
+  if (state?.qrOpen) hideQrPopover(win);
+  else showQrPopover(win);
 });
 
 ipcMain.on('qr-close', (event) => {
-  const state = previewWindows.find(
-    (s) => s.qrWin && !s.qrWin.isDestroyed() && s.qrWin.webContents.id === event.sender.id
-  );
+  const state = previewWindows.find((s) => s.qrView?.webContents.id === event.sender.id);
   if (state) hideQrPopover(state.win);
 });
 
