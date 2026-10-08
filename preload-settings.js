@@ -5,4 +5,5 @@ contextBridge.exposeInMainWorld('settingsAPI', {
   setSetting: (key, value) => ipcRenderer.send('set-app-setting', { key, value }),
   clearHistory: () => ipcRenderer.send('clear-folder-history'),
   openHistoryFolder: (folderPath) => ipcRenderer.send('open-history-folder', folderPath),
+  openAbout: () => ipcRenderer.send('open-about'),
 });

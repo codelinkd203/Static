@@ -334,8 +334,8 @@ function createSettingsWindow() {
   }
 
   settingsWin = new BrowserWindow({
-    width: 420,
-    height: 560,
+    width: 440,
+    height: 600,
     resizable: false,
     fullscreenable: false,
     maximizable: false,
@@ -1152,6 +1152,10 @@ ipcMain.on('set-reload-setting', (_event, { key, value } = {}) => {
 });
 
 ipcMain.handle('get-app-settings', () => ({ ...appSettings }));
+
+ipcMain.on('open-about', () => {
+  app.showAboutPanel();
+});
 
 ipcMain.on('set-app-setting', (_event, { key, value } = {}) => {
   const booleanKeys = ['autoReload', 'suppressReloadToast', 'devtoolsErrorCounterEnabled', 'devtoolsDetached'];
