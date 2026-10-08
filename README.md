@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://github.com/codelinkd203/Static">
+  <a href="https://codelinkd203.github.io/static-site/">
     <img src="renderer/assets/logo.png" alt="Static Logo" width="160"/>
   </a>
 </p>
