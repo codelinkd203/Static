@@ -1,7 +1,7 @@
 {
   "name": "static",
   "version": "4.2.0",
-  "description": "Instant Local Web Preview — drop a folder, serve it, preview it.",
+  "description": "Instant Local Web Preview — drop a folder, serve it, preview it. That's Static.",
   "main": "main.js",
   "author": "Static",
   "license": "MIT",
