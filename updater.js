@@ -16,7 +16,7 @@ const { execFile, spawn, execFileSync } = require('child_process');
 const run = promisify(execFile);
 
 const REPO = 'codelinkd203/Static';
-const VERSION_URL = `https://raw.githubusercontent.com/${REPO}/refs/heads/main/package.json`;
+const VERSION_URL = `https://raw.githubusercontent.com/${REPO}/refs/heads/main/package.json?cb=` + Date.now();
 const dmgUrl = (version, file) => `https://github.com/${REPO}/releases/download/v${version}/${file}`;
 const releasePageUrl = (version) => `https://github.com/${REPO}/releases/tag/v${version}`;
 
